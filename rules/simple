@@ -1,0 +1,18 @@
+RULES='
+{
+  "rules": [{
+  	"rule": {
+  		"url": "https://$JENKINS/eagle/job/$SERVER/job/$ENV/job/$REGION/job/uninstallPackage",
+  		"sleep": "100000",
+      "parameters": [
+  			{ "sideState": "active" },
+  			{ "packageName": "cluster-splunkforwarder-hvc" },
+  			{ "appId": "cluster-splunkforwarder-hvc" },
+  			{ "product": "cluster03" },
+  			{ "tier": "dev" },
+  			{ "region": "jpn3" },
+  			{ "flow": "uninstallPackage" }
+  		]
+  	}
+  }]
+}'
