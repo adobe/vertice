@@ -33,12 +33,25 @@ where:
   echo "$USAGE"
 }
 
-USER=$(echo $CONFIG | jq .config | jq .user | tr -d '"')
-TOKEN=$(echo $CONFIG | jq .config | jq .token | tr -d '"')
-SERVER=$(echo $CONFIG | jq .config | jq .server | tr -d '"')
-JENKINS=$(echo $CONFIG | jq .config | jq .jenkins | tr -d '"')
-REGION=$(echo $CONFIG | jq .config | jq .region | tr -d '"')
-ENV=$(echo $CONFIG | jq .config | jq .env | tr -d '"')
+if [[ -z "${VUSER}" ]]; then
+  VUSER=$(echo $CONFIG | jq .config | jq .user | tr -d '"')
+fi
+
+if [[ -z "${VTOKEN}" ]]; then
+  VTOKEN=$(echo $CONFIG | jq .config | jq .token | tr -d '"')
+fi
+
+if [[ -z "${VSERVER}" ]]; then
+  VSERVER=$(echo $CONFIG | jq .config | jq .server | tr -d '"')
+fi
+
+if [[ -z "${REGION}" ]]; then
+  VREGION=$(echo $CONFIG | jq .config | jq .region | tr -d '"')
+fi
+
+if [[ -z "${ENV}" ]]; then
+  VENV=$(echo $CONFIG | jq .config | jq .env | tr -d '"')
+fi
 
 while getopts "h?vr:s:d" opt; do
     case "$opt" in
@@ -61,28 +74,28 @@ while getopts "h?vr:s:d" opt; do
 
         for row in $(echo "${RULES}" | jq -r '.rules[] | @base64'); do
             RULE=$(echo ${row} | base64 --decode)
-            JENKINS=$(echo $RULE | jq .rule | jq -r .url | sed 's/$SERVER/'"$SERVER"'/g' | sed 's/$REGION/'"$ENV"'/g' | sed 's/$ENV/'"$REGION"'/g')
+            JENKINS=$(echo $RULE | jq .rule | jq -r .url | sed 's/$SERVER/'"$VSERVER"'/g' | sed 's/$REGION/'"$VENV"'/g' | sed 's/$ENV/'"$VREGION"'/g')
             PARAMETERS=$(echo $RULE | jq .rule | jq .parameters)
             SLEEP=$(echo $RULE | jq .rule | jq -r .sleep)
             PARAMS=""
 
             for param in $(echo "${RULE}" | jq -r '.rule' | jq -r '.parameters[] | @base64'); do
               PNAME=$(echo ${param} | base64 --decode | jq -r '. | keys[]')
-              PVALUE=$(echo ${param} | base64 --decode | jq -r '. | values[]' | sed 's/$SERVER/'"$SERVER"'/g' | sed 's/$REGION/'"$REGION"'/g' | sed 's/$ENV/'"$ENV"'/g')
+              PVALUE=$(echo ${param} | base64 --decode | jq -r '. | values[]' | sed 's/$SERVER/'"$VSERVER"'/g' | sed 's/$REGION/'"$VREGION"'/g' | sed 's/$ENV/'"$VENV"'/g')
               PARAMS=$PARAMS"{\"name\":\"${PNAME}\", \"value\":\"${PVALUE}\"},"
             done
 
             PARAMS=$(echo ${PARAMS} | rev | cut -c 2- | rev)
             PARAMS=$(echo "["${PARAMS}"]")
 
-            echo "curl -X POST ${JENKINS} --user ${USER}:${TOKEN}  --data-urlencode 'json={\"parameter\":${PARAMS}}'"
-            echo "curl -X POST ${JENKINS} --user ${USER}:${TOKEN}  --data-urlencode 'json={\"parameter\":${PARAMS}}'" >> vertice-$(date +%Y%m%d).log
+            echo "curl -X POST ${JENKINS} --user ${VUSER}:${VTOKEN}  --data-urlencode 'json={\"parameter\":${PARAMS}}'"
+            echo "curl -X POST ${JENKINS} --user ${VUSER}:${VTOKEN}  --data-urlencode 'json={\"parameter\":${PARAMS}}'" >> vertice-$(date +%Y%m%d).log
             echo "sleep ${SLEEP}"
 
             if [[ "$DRY" != true ]]
             then
               echo "Running Job"
-              curl -X POST ${JENKINS} --user ${USER}:${TOKEN} --data-urlencode "json={\"parameter\":${PARAMS}}"
+              curl -X POST ${JENKINS} --user ${VUSER}:${VTOKEN} --data-urlencode "json={\"parameter\":${PARAMS}}"
               echo "Waiting $SLEEP seconds"
               sleep $SLEEP
             fi
