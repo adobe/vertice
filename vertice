@@ -45,11 +45,11 @@ if [[ -z "${VSERVER}" ]]; then
   VSERVER=$(echo $CONFIG | jq .config | jq .server | tr -d '"')
 fi
 
-if [[ -z "${REGION}" ]]; then
+if [[ -z "${VREGION}" ]]; then
   VREGION=$(echo $CONFIG | jq .config | jq .region | tr -d '"')
 fi
 
-if [[ -z "${ENV}" ]]; then
+if [[ -z "${VENV}" ]]; then
   VENV=$(echo $CONFIG | jq .config | jq .env | tr -d '"')
 fi
 
@@ -63,20 +63,25 @@ while getopts "h?vr:s:d" opt; do
         echo "Verbose"
         echo $CONFIG | jq .
         ;;
-    s)  SERVER=$OPTARG
+    s)  VSERVER=$OPTARG
         ;;
     d)  DRY=true
+        echo "Enabling Dry Mode"
         ;;
     r)  RFILE=$OPTARG
         source $RFILE
 
-        rm vertice-$(date +%Y%m%d).log
+        if [ -e x.txt ]
+        then
+          rm vertice-$(date +%Y%m%d).log
+        fi
 
         for row in $(echo "${RULES}" | jq -r '.rules[] | @base64'); do
             RULE=$(echo ${row} | base64 --decode)
             JENKINS=$(echo $RULE | jq .rule | jq -r .url | sed 's/$SERVER/'"$VSERVER"'/g' | sed 's/$REGION/'"$VENV"'/g' | sed 's/$ENV/'"$VREGION"'/g')
             PARAMETERS=$(echo $RULE | jq .rule | jq .parameters)
-            SLEEP=$(echo $RULE | jq .rule | jq -r .sleep)
+            CHECKS=$(echo $RULE | jq .rule | jq .checks)
+            SLEEP=$(echo $RULE | jq .rule | jq -r .sleep | sed 's/$SERVER/'"$VSERVER"'/g' | sed 's/$REGION/'"$VENV"'/g' | sed 's/$ENV/'"$VREGION"'/g')
             PARAMS=""
 
             for param in $(echo "${RULE}" | jq -r '.rule' | jq -r '.parameters[] | @base64'); do
@@ -88,16 +93,48 @@ while getopts "h?vr:s:d" opt; do
             PARAMS=$(echo ${PARAMS} | rev | cut -c 2- | rev)
             PARAMS=$(echo "["${PARAMS}"]")
 
-            echo "curl -X POST ${JENKINS} --user ${VUSER}:${VTOKEN}  --data-urlencode 'json={\"parameter\":${PARAMS}}'"
-            echo "curl -X POST ${JENKINS} --user ${VUSER}:${VTOKEN}  --data-urlencode 'json={\"parameter\":${PARAMS}}'" >> vertice-$(date +%Y%m%d).log
+            echo "curl -X POST ${JENKINS} --user ${VUSER}:${VTOKEN} --data-urlencode 'json={\"parameter\":${PARAMS}}'"
+            echo "curl -X POST ${JENKINS} --user ${VUSER}:${VTOKEN} --data-urlencode 'json={\"parameter\":${PARAMS}}'" >> vertice-$(date +%Y%m%d).log
             echo "sleep ${SLEEP}"
+
+            if [[ ${CHECKS} != null ]]
+            then
+              for check in $(echo "${RULE}" | jq -r '.rule' | jq -r '.checks[] | @base64'); do
+                CHECKVALUE=$(echo ${check} | base64 --decode | jq -r '. | values[]' | sed 's/$SERVER/'"$VSERVER"'/g' | sed 's/$REGION/'"$VREGION"'/g' | sed 's/$ENV/'"$VENV"'/g')
+                echo $CHECKVALUE
+              done
+            fi
 
             if [[ "$DRY" != true ]]
             then
               echo "Running Job"
-              curl -X POST ${JENKINS} --user ${VUSER}:${VTOKEN} --data-urlencode "json={\"parameter\":${PARAMS}}"
+              QUEUE_URL=$(curl -X POST --silent ${JENKINS} --user ${VUSER}:${VTOKEN} --data-urlencode "json={\"parameter\":${PARAMS}}" --dump-header - --output /dev/null | grep Location | awk '{print $2}' | tr -d '\r\n')
+
+              BUILD_URL=''
+              while [ ! -n "$BUILD_URL" ]; do
+                BUILD_URL=$(curl --silent "${QUEUE_URL}api/json" --user "${VUSER}:${VTOKEN}" | jq -r '.lastBuild.url')
+                # echo "curl --silent ${QUEUE_URL}api/json --user ${VUSER}:${VTOKEN} | jq -r '.lastBuild.url'"
+                sleep 1
+              done
+
+              STATUSJOB=''
+              while [[ ${STATUSJOB} != "SUCCESS" ]]; do
+                STATUSJOB=$(curl --silent ${BUILD_URL}api/json --user ${VUSER}:${VTOKEN} | jq -r .result)
+                sleep 20
+              done
+
+              curl --silent ${BUILD_URL}/consoleText  --user ${VUSER}:${VTOKEN}
+
               echo "Waiting $SLEEP seconds"
               sleep $SLEEP
+
+              if [[ ${CHECKS} != null ]]
+              then
+                for check in $(echo "${RULE}" | jq -r '.rule' | jq -r '.checks[] | @base64'); do
+                  CHECKVALUE=$(echo ${check} | base64 --decode | jq -r '. | values[]' | sed 's/$SERVER/'"$VSERVER"'/g' | sed 's/$REGION/'"$VREGION"'/g' | sed 's/$ENV/'"$VENV"'/g')
+                  $CHECKVALUE
+                done
+              fi
             fi
         done
         ;;
