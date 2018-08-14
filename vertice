@@ -120,7 +120,7 @@ while getopts "h?vr:s:d" opt; do
               STATUSJOB=''
               while [[ ${STATUSJOB} != "SUCCESS" ]]; do
                 STATUSJOB=$(curl --silent ${BUILD_URL}api/json --user ${VUSER}:${VTOKEN} | jq -r .result)
-                sleep 20
+                sleep 10
               done
 
               curl --silent ${BUILD_URL}/consoleText  --user ${VUSER}:${VTOKEN}
