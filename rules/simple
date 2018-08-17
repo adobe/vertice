@@ -2,8 +2,12 @@ RULES='
 {
   "rules": [{
   	"rule": {
-  		"url": "https://$JENKINS/eagle/job/$SERVER/job/$ENV/job/$REGION/job/uninstallPackage",
-  		"sleep": "100000",
+  		"url": "https://$JENKINS/eagle/job/$SERVER/job/$ENV/job/$REGION/job/uninstallPackage/build?delay=0sec",
+  		"sleep": "100",
+      "checks": [
+        { "command": "../coral/coral -s $SERVER-$ENV-control.$REGION.cloud.server.io -c service/random/ | jq -r .maintenanceMode | jq .locked" },
+        { "command": "../coral/coral -s $SERVER-$ENV-control.$REGION.cloud.server.io -d" }
+      ]
       "parameters": [
   			{ "sideState": "active" },
   			{ "packageName": "cluster-splunkforwarder-hvc" },
